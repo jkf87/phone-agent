@@ -21,7 +21,7 @@ OpenAI Realtime API (gpt-4o-mini-realtime-preview)
 
 ---
 
-## 셋업
+## 빠른 시작 (Quick Start)
 
 ### 1. 계정 준비
 
@@ -29,7 +29,7 @@ OpenAI Realtime API (gpt-4o-mini-realtime-preview)
 |--------|------|------|
 | [Twilio](https://twilio.com) | 전화 발신/수신 | 미국 번호 구매 ($1/월) |
 | [OpenAI](https://platform.openai.com) | 실시간 음성 대화 | API Key 발급 |
-| [ngrok](https://ngrok.com) | 로컬 서버 터널링 | 무료 계정 |
+| [ngrok](https://ngrok.com) | 로컬 서버 터널링 | 무료 계정 + authtoken 필수 |
 
 ### 2. Twilio 설정
 
@@ -40,24 +40,15 @@ OpenAI Realtime API (gpt-4o-mini-realtime-preview)
 
 > Customer Profile이 Approved 되어도 Voice가 안 되면 Twilio 지원팀에 Voice 활성화 요청이 필요할 수 있습니다.
 
-### 3. ngrok 설치
+### 3. 초기 설정 (최초 1회)
 
 ```bash
-brew install ngrok
-ngrok config add-authtoken 여기에_토큰
+bash scripts/setup.sh
 ```
 
-### 4. Python 패키지 설치
+자동 처리: Python 패키지 설치 → ngrok 확인 → .env 템플릿 생성
 
-```bash
-pip3 install fastapi uvicorn twilio websockets audioop-lts
-```
-
-> Python 3.13+에서는 `audioop-lts` 필수
-
-### 5. .env 파일 생성
-
-프로젝트 루트에 `.env` 파일 생성:
+setup.sh 실행 후 `.env` 파일에 API 키를 채워넣으세요:
 
 ```bash
 OPENAI_API_KEY="sk-..."
@@ -66,6 +57,8 @@ TWILIO_AUTH_TOKEN="xxxxxxxx"
 TWILIO_PHONE_NUMBER_SID="PNxxxxxxxx"
 PORT=8082
 ```
+
+> ngrok authtoken은 별도 설정 필요: `ngrok config add-authtoken 여기에_토큰`
 
 ---
 
@@ -78,7 +71,7 @@ bash scripts/start.sh
 ```
 
 자동으로 처리됨:
-1. 기존 서버 종료
+1. 의존성 체크 (없으면 자동 설치)
 2. ngrok 시작 + HTTPS URL 감지
 3. Twilio Webhook 자동 업데이트
 4. 서버 시작
@@ -121,17 +114,22 @@ SYSTEM_PROMPT = """당신은 AI 모닝콜 비서 '하나'예요. 반말로 친�
 SYSTEM_PROMPT = """You are Sarah, a friendly English conversation partner..."""
 ```
 
+변경 후 start.sh를 다시 실행해야 반영됩니다.
+
 ### 보이스 변경
 
 `VOICE` 변수 변경:
 
 | Voice | 특징 |
 |-------|------|
-| `shimmer` | 따뜻한 여성 (기본값) |
+| `shimmer` | 밝고 에너지 넘치는 (기본값) |
 | `alloy` | 중성적, 균형 |
 | `echo` | 차분한 남성 |
-| `coral` | 밝고 활기찬 |
-| `sage` | 부드럽고 차분 |
+| `coral` | 따뜻하고 친근한 |
+| `sage` | 부드럽고 차분한 |
+| `ash` | 또렷하고 명확한 |
+| `ballad` | 감성적이고 부드러운 |
+| `verse` | 다재다능한 |
 
 ---
 
@@ -139,38 +137,29 @@ SYSTEM_PROMPT = """You are Sarah, a friendly English conversation partner..."""
 
 | 증상 | 해결 |
 |------|------|
-| `ModuleNotFoundError: audioop` | `pip3 install audioop-lts` |
+| `ModuleNotFoundError: audioop` | `pip3 install --break-system-packages audioop-lts` |
 | 칙칙 소리 | 오디오 변환 24000→8000 확인 |
 | 스페인어/영어로 대답 | voice 이름 유효한지 확인 (`fable` 등 구형 제거됨) |
 | error 10005 | Twilio Customer Profile + Voice 활성화 |
 | 국제전화 수신거부 | 수신자가 통신사에서 국제전화 수신 허용 |
+| .env 값 비어있음 | `bash scripts/setup.sh` 실행 후 값 채우기 |
 
 ---
 
 ## 비용
 
-월 약 $4.3 (~6,000원)
+월 약 $17 (~24,000원) — 하루 3분, 평일 22일 기준
 
 | 서비스 | 월 비용 |
 |--------|---------|
 | Twilio 번호 | $1 |
-| Twilio 통화 (하루 10분 × 22일) | ~$1.3 |
-| OpenAI Realtime | ~$2 |
+| Twilio 통화 (66분 × $0.05) | ~$4.3 |
+| OpenAI Realtime (66분 × $0.20) | ~$13 |
 | ngrok | 무료 |
 
+> gpt-4o-mini-realtime-preview 기준. 통화 시간을 줄이면 비용도 줄어듭니다.
+
 ---
-
-## Claude Code 스킬로 사용
-
-```bash
-# 스킬 설치
-claude install-skill phone-agent.skill
-
-# 이후 자연어로 사용
-# "전화 서버 시작해줘"
-# "01012345678로 전화 걸어줘"
-# "모닝콜 페르소나 영어 회화 파트너로 바꿔줘"
-```
 
 ## 라이선스
 

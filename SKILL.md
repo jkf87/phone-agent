@@ -1,22 +1,34 @@
 ---
 name: phone-agent
-description: "AI 실시간 음성 전화 에이전트. Twilio + OpenAI Realtime API로 양방향 음성 대화. 서버 시작, 전화 발신, AI 페르소나/보이스 변경 지원. 사용 시점: (1) 'AI 전화 걸어줘', '모닝콜 해줘' 등 전화 관련 요청, (2) '전화 서버 시작', 'phone agent 시작', (3) 특정 번호로 전화 발신 요청, (4) AI 전화 페르소나 설정/변경"
+description: "AI 실시간 음성 전화 에이전트 (OpenAI Realtime API 전용). Twilio + OpenAI Realtime API만 사용. Deepgram, ElevenLabs 불필요. 서버 파일은 반드시 scripts/server_realtime.py를 사용할 것 (server.py 아님). 사용 시점: (1) 'AI 전화 걸어줘', '모닝콜 해줘' 등 전화 관련 요청, (2) '전화 서버 시작', 'phone agent 시작', (3) 특정 번호로 전화 발신 요청, (4) AI 전화 페르소나 설정/변경"
 ---
 
-# Phone Agent
+# Phone Agent (OpenAI Realtime API 전용)
 
 OpenAI Realtime API + Twilio로 AI가 실시간 음성 전화를 걸고 대화하는 스킬.
 
+**중요: 이 스킬은 Deepgram, ElevenLabs를 사용하지 않음.** OpenAI Realtime API가 음성 인식 + AI 대화 + 음성 합성을 모두 처리. 필요한 API 키는 OpenAI + Twilio 두 개뿐.
+
 ## 사전 요구사항
 
-- Python 3.13+
-- ngrok (`brew install ngrok` + authtoken 설정)
+- Python 3.11+ (3.13+ 권장, audioop-lts 자동 설치됨)
+- ngrok (authtoken 설정 필수)
 - Twilio 계정 (전화번호 + Customer Profile Approved + Geo Permissions: South Korea)
 - OpenAI API Key (Realtime API 지원)
 
+## 초기 설정 (최초 1회)
+
+```bash
+bash scripts/setup.sh
+```
+
+자동 처리: Python 패키지 설치(audioop-lts 포함) → ngrok 확인 → .env 템플릿 생성
+
+Mac과 Linux/WSL 모두 지원. setup.sh 실행 후 `.env` 파일에 API 키를 채워넣으면 준비 완료.
+
 ## 환경변수 (.env)
 
-스킬 디렉토리에 `.env` 파일 생성:
+스킬 디렉토리의 `.env` 파일 (setup.sh가 자동 생성):
 
 ```
 OPENAI_API_KEY="sk-..."
@@ -24,7 +36,10 @@ TWILIO_ACCOUNT_SID="ACxxxxxxxx"
 TWILIO_AUTH_TOKEN="xxxxxxxx"
 TWILIO_PHONE_NUMBER_SID="PNxxxxxxxx"
 PORT=8082
+MY_PHONE="+821012345678"  # (선택) make-call.sh에서 기본 수신번호로 사용
 ```
+
+**Deepgram, ElevenLabs 키는 필요 없음.** `PUBLIC_URL_REALTIME`은 start.sh가 자동 설정.
 
 ## 워크플로우
 
@@ -34,14 +49,21 @@ PORT=8082
 bash scripts/start.sh
 ```
 
-자동 처리: 기존 프로세스 종료 → ngrok 시작 → URL 감지 → Twilio Webhook 업데이트 → 서버 시작
+자동 처리: 의존성 체크(없으면 자동 설치) → ngrok 시작 → URL 감지 → Twilio Webhook 업데이트 → `scripts/server_realtime.py` 실행
+
+**주의: server.py가 아닌 server_realtime.py를 실행해야 함.** start.sh가 올바른 파일을 자동 실행.
 
 ### 2. 전화 발신
 
-서버 실행 중 상태에서, ngrok URL을 감지 후 Twilio API로 발신:
+서버 실행 중 상태에서:
 
 ```bash
-# ngrok URL 감지
+bash scripts/make-call.sh +821012345678
+```
+
+또는 수동으로:
+
+```bash
 NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -49,25 +71,21 @@ ts = [t['public_url'] for t in d.get('tunnels',[]) if t.get('proto')=='https']
 print(ts[0] if ts else '')
 ")
 
-# .env 로드
 source .env
 
-# 전화 발신 (번호를 +82 형식으로 변환)
 curl -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json" \
   --data-urlencode "To=+821012345678" \
-  --data-urlencode "From=+1XXXXXXXXXX" \
+  --data-urlencode "From=$(curl -s "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${TWILIO_PHONE_NUMBER_SID}.json" -u "${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}" | python3 -c "import json,sys;print(json.load(sys.stdin).get('phone_number',''))")" \
   --data-urlencode "Url=${NGROK_URL}/incoming" \
   --data-urlencode "Timeout=30" \
   -u "${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}"
 ```
 
-성공 시 `"status": "queued"` 응답, 수 초 후 전화 울림.
-
 한국 번호 변환: `010-1234-5678` → `+821012345678` (0 제거, +82 추가)
 
 ### 3. 페르소나 변경
 
-`scripts/server_realtime.py`의 `SYSTEM_PROMPT` 수정:
+`scripts/server_realtime.py`의 `SYSTEM_PROMPT` 수정 후 start.sh 재실행:
 
 ```python
 SYSTEM_PROMPT = """당신은 AI 비서 '하나'예요. 반말로 친근하게 대화해주세요."""
@@ -75,39 +93,39 @@ SYSTEM_PROMPT = """당신은 AI 비서 '하나'예요. 반말로 친근하게 �
 
 ### 4. 보이스 변경
 
-`scripts/server_realtime.py`의 `session.update`에서 `voice` 값 변경:
+`scripts/server_realtime.py`의 `VOICE` 변수 변경:
 
 | Voice | 특징 |
 |-------|------|
-| `shimmer` | 따뜻한 여성 (기본값) |
+| `shimmer` | 밝고 에너지 넘치는 (기본값) |
 | `alloy` | 중성적, 균형 |
 | `echo` | 차분한 남성 |
-| `coral` | 밝고 활기찬 |
-| `sage` | 부드럽고 차분 |
+| `coral` | 따뜻하고 친근한 |
+| `sage` | 부드럽고 차분한 |
 | `ash`, `ballad`, `verse`, `marin`, `cedar` | 기타 |
 
 ## 핵심 기술 포인트
 
 오디오 포맷 변환 (틀리면 칙칙 소리):
-- Twilio→OpenAI: mu-law 8kHz → PCM16 16kHz
-- OpenAI→Twilio: PCM16 **24kHz** → mu-law 8kHz (24kHz 필수)
+- Twilio→OpenAI: mu-law 8kHz → PCM16 16kHz (`audioop.ulaw2lin` + `audioop.ratecv`)
+- OpenAI→Twilio: PCM16 **24kHz** → mu-law 8kHz (24kHz 필수, `audioop.ratecv` + `audioop.lin2ulaw`)
+
+**audioop 사용 필수.** Python 3.13+에서는 audioop가 제거됐으므로 `audioop-lts` 패키지 설치 필요. NumPy 등으로 대체하지 말 것 (버그 발생 위험).
 
 ## 문제 해결
 
 | 증상 | 해결 |
 |------|------|
-| `ModuleNotFoundError: audioop` | `pip3 install --break-system-packages audioop-lts` |
+| `ModuleNotFoundError: audioop` | `pip3 install audioop-lts` (Python 3.13+) |
 | 칙칙 소리 | `openai_to_twilio_audio`에서 24000→8000 확인 |
-| 스페인어/영어로 대답 | voice 이름 유효한지 확인 (fable 등 구형 제거됨) |
+| 스페인어/영어로 대답 | voice 이름 유효한지 확인 (fable 등 구형 제거됨), SYSTEM_PROMPT가 한국어인지 확인 |
 | error 10005 | Twilio Customer Profile 생성 + 지원팀 Voice 활성화 요청 |
 | 국제전화 수신거부 | 수신자가 통신사에서 국제전화 수신 허용 |
-
-## 설치 (패키지 없을 때)
-
-```bash
-pip3 install --break-system-packages fastapi uvicorn twilio websockets audioop-lts
-```
+| .env 값 비어있음 | `bash scripts/setup.sh` 실행 후 .env에 API 키 채우기 |
+| ngrok 없음 | Mac: `brew install ngrok` / Linux: `snap install ngrok` 또는 직접 다운로드 |
+| application error + 5초 끊김 | server_realtime.py 실행 확인 (server.py 아님), audioop-lts 설치 확인 |
 
 ## 비용
 
-월 약 $4.3 (~6,000원): Twilio 번호 $1 + 통화 ~$1.3 + OpenAI ~$2
+월 약 $17.5 (~24,000원): Twilio 번호 $1 + 통화 ~$3.3 (66분×$0.05) + OpenAI Realtime ~$13.2 (66분×$0.20)
+기준: 하루 3분, 평일 22일 사용 (gpt-4o-mini-realtime-preview)
