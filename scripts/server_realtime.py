@@ -5,11 +5,9 @@ Real-time speech-to-speech voice agent over phone calls.
 import os
 import json
 import asyncio
-import base64
 import logging
 from urllib.parse import urlsplit
 
-import audioop
 import uvicorn
 from fastapi import FastAPI, WebSocket, Request, Response
 from fastapi.websockets import WebSocketDisconnect
@@ -45,20 +43,6 @@ VOICE = "shimmer"  # alloy, ash, ballad, coral, echo, sage, shimmer, verse, mari
 # ─────────────────────────────────────────────────────────────
 
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview"
-
-
-def twilio_to_openai_audio(mulaw_chunk: bytes) -> bytes:
-    """Twilio mu-law 8kHz → OpenAI PCM16 16kHz."""
-    pcm_8k = audioop.ulaw2lin(mulaw_chunk, 2)
-    pcm_16k, _ = audioop.ratecv(pcm_8k, 2, 1, 8000, 16000, None)
-    return pcm_16k
-
-
-def openai_to_twilio_audio(pcm16_chunk: bytes) -> bytes:
-    """OpenAI PCM16 24kHz → Twilio mu-law 8kHz."""
-    pcm_8k, _ = audioop.ratecv(pcm16_chunk, 2, 1, 24000, 8000, None)
-    mulaw = audioop.lin2ulaw(pcm_8k, 2)
-    return mulaw
 
 
 @app.post("/incoming")
@@ -124,8 +108,8 @@ async def media_stream(twilio_ws: WebSocket):
         "session": {
             "instructions": SYSTEM_PROMPT,
             "voice": VOICE,
-            "input_audio_format": "pcm16",
-            "output_audio_format": "pcm16",
+            "input_audio_format": "g711_ulaw",
+            "output_audio_format": "g711_ulaw",
             "modalities": ["text", "audio"],
             "turn_detection": {
                 "type": "server_vad",
@@ -149,12 +133,10 @@ async def media_stream(twilio_ws: WebSocket):
                     stream_sid = data["start"]["streamSid"]
                     logger.info(f"Twilio: stream started ({stream_sid})")
                 elif data["event"] == "media":
-                    mulaw_audio = base64.b64decode(data["media"]["payload"])
-                    pcm16_audio = twilio_to_openai_audio(mulaw_audio)
-                    encoded = base64.b64encode(pcm16_audio).decode("utf-8")
+                    # g711_ulaw: Twilio mu-law → OpenAI 직접 전달 (변환 불필요)
                     await openai_ws.send(json.dumps({
                         "type": "input_audio_buffer.append",
-                        "audio": encoded
+                        "audio": data["media"]["payload"]
                     }))
                 elif data["event"] == "stop":
                     logger.info("Twilio: stream stopped")
@@ -182,13 +164,11 @@ async def media_stream(twilio_ws: WebSocket):
                     logger.info("OpenAI: session updated")
                 elif event_type == "response.audio.delta":
                     if stream_sid and "delta" in data:
-                        pcm16_audio = base64.b64decode(data["delta"])
-                        mulaw_audio = openai_to_twilio_audio(pcm16_audio)
-                        payload = base64.b64encode(mulaw_audio).decode("utf-8")
+                        # g711_ulaw: OpenAI mu-law → Twilio 직접 전달 (변환 불필요)
                         await twilio_ws.send_json({
                             "event": "media",
                             "streamSid": stream_sid,
-                            "media": {"payload": payload}
+                            "media": {"payload": data["delta"]}
                         })
                 elif event_type == "response.audio_transcript.done":
                     transcript = data.get("transcript", "")

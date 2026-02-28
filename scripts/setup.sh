@@ -62,23 +62,6 @@ else
   echo "  start.sh가 venv를 자동 감지하므로 별도 활성화 불필요"
 fi
 
-# audioop 동작 확인
-echo ""
-if "$PYTHON_CMD" -c "import audioop" 2>/dev/null; then
-  echo "✓ audioop 모듈 정상"
-else
-  echo "⚠ audioop 모듈 로드 실패. audioop-lts 재설치 시도..."
-  $INSTALL_CMD --break-system-packages audioop-lts 2>/dev/null \
-    || $INSTALL_CMD audioop-lts 2>/dev/null \
-    || true
-  # 재검증
-  if "$PYTHON_CMD" -c "import audioop" 2>/dev/null; then
-    echo "✓ audioop 복구 성공"
-  else
-    echo "✗ audioop-lts 설치 실패. 수동 설치: pip install audioop-lts"
-  fi
-fi
-
 # 3. ngrok 설치 확인
 echo ""
 if command -v ngrok &>/dev/null; then
@@ -95,7 +78,9 @@ else
     echo "    sudo apt update && sudo apt install ngrok"
   fi
   echo ""
-  echo "  설치 후 인증: ngrok config add-authtoken 여기에_토큰"
+  echo "  설치 후 인증 (둘 중 하나):"
+  echo "    방법1: .env에 NGROK_AUTHTOKEN=\"여기에_토큰\" 추가 (추천)"
+  echo "    방법2: ngrok config add-authtoken 여기에_토큰"
   echo "  토큰은 https://dashboard.ngrok.com 에서 가입 후 복사"
 fi
 
@@ -135,6 +120,10 @@ TWILIO_AUTH_TOKEN=""
 # Twilio 전화번호 SID (Phone Numbers → 번호 클릭 → URL의 PN값)
 TWILIO_PHONE_NUMBER_SID=""
 
+# ngrok authtoken (dashboard.ngrok.com → Your Authtoken)
+# .env에 넣으면 ngrok config 없이 자동 인증됨
+NGROK_AUTHTOKEN=""
+
 # 서버 포트 (변경하지 않아도 됨)
 PORT=8082
 
@@ -153,8 +142,8 @@ echo "이 스킬은 OpenAI Realtime API 전용입니다."
 echo "Deepgram, ElevenLabs 키는 필요 없습니다."
 echo ""
 echo "다음 단계:"
-echo "  1. .env 파일에 API 키 입력: $ENV_FILE"
-echo "  2. ngrok 설치 + authtoken 설정 (아직 안 했다면)"
+echo "  1. .env 파일에 API 키 + NGROK_AUTHTOKEN 입력: $ENV_FILE"
+echo "  2. ngrok 설치 (아직 안 했다면)"
 echo "  3. 서버 시작: bash $SCRIPT_DIR/start.sh"
 echo "  4. 전화 발신: bash $SCRIPT_DIR/make-call.sh +821012345678"
 echo ""

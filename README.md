@@ -55,10 +55,11 @@ OPENAI_API_KEY="sk-..."
 TWILIO_ACCOUNT_SID="ACxxxxxxxx"
 TWILIO_AUTH_TOKEN="xxxxxxxx"
 TWILIO_PHONE_NUMBER_SID="PNxxxxxxxx"
+NGROK_AUTHTOKEN="2xxx..."
 PORT=8082
 ```
 
-> ngrok authtoken은 별도 설정 필요: `ngrok config add-authtoken 여기에_토큰`
+> `NGROK_AUTHTOKEN`을 .env에 넣으면 ngrok config 없이 자동 인증됩니다.
 
 ---
 
@@ -137,11 +138,11 @@ SYSTEM_PROMPT = """You are Sarah, a friendly English conversation partner..."""
 
 | 증상 | 해결 |
 |------|------|
-| `ModuleNotFoundError: audioop` | `pip3 install --break-system-packages audioop-lts` |
-| 칙칙 소리 | 오디오 변환 24000→8000 확인 |
+| 칙칙 소리 | g711_ulaw 포맷 사용 확인 (pcm16은 변환 시 칙칙거림) |
 | 스페인어/영어로 대답 | voice 이름 유효한지 확인 (`fable` 등 구형 제거됨) |
 | error 10005 | Twilio Customer Profile + Voice 활성화 |
 | 국제전화 수신거부 | 수신자가 통신사에서 국제전화 수신 허용 |
+| ngrok 세션 제한 | 무료 계정 동시 1세션. 다른 기기 ngrok 종료 또는 [dashboard.ngrok.com/agents](https://dashboard.ngrok.com/agents)에서 세션 종료 |
 | .env 값 비어있음 | `bash scripts/setup.sh` 실행 후 값 채우기 |
 
 ---

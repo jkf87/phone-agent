@@ -11,8 +11,8 @@ OpenAI Realtime API + Twilio로 AI가 실시간 음성 전화를 걸고 대화�
 
 ## 사전 요구사항
 
-- Python 3.11+ (3.13+ 권장, audioop-lts 자동 설치됨)
-- ngrok (authtoken 설정 필수)
+- Python 3.11+
+- ngrok (authtoken 설정 필수, 무료 계정 동시 1세션 제한)
 - Twilio 계정 (전화번호 + Customer Profile Approved + Geo Permissions: South Korea)
 - OpenAI API Key (Realtime API 지원)
 
@@ -22,9 +22,9 @@ OpenAI Realtime API + Twilio로 AI가 실시간 음성 전화를 걸고 대화�
 bash scripts/setup.sh
 ```
 
-자동 처리: Python 패키지 설치(audioop-lts 포함) → ngrok 확인 → .env 템플릿 생성
+자동 처리: Python 패키지 설치 → ngrok 확인 → .env 템플릿 생성
 
-Mac과 Linux/WSL 모두 지원. setup.sh 실행 후 `.env` 파일에 API 키를 채워넣으면 준비 완료.
+Mac, Linux/WSL, Windows(WSL) 모두 지원. setup.sh 실행 후 `.env` 파일에 API 키를 채워넣으면 준비 완료.
 
 ## 환경변수 (.env)
 
@@ -35,11 +35,12 @@ OPENAI_API_KEY="sk-..."
 TWILIO_ACCOUNT_SID="ACxxxxxxxx"
 TWILIO_AUTH_TOKEN="xxxxxxxx"
 TWILIO_PHONE_NUMBER_SID="PNxxxxxxxx"
+NGROK_AUTHTOKEN="2xxx..."  # dashboard.ngrok.com → Your Authtoken
 PORT=8082
 MY_PHONE="+821012345678"  # (선택) make-call.sh에서 기본 수신번호로 사용
 ```
 
-**Deepgram, ElevenLabs 키는 필요 없음.** `PUBLIC_URL_REALTIME`은 start.sh가 자동 설정.
+**Deepgram, ElevenLabs 키는 필요 없음.** `PUBLIC_URL_REALTIME`은 start.sh가 자동 설정. `NGROK_AUTHTOKEN`을 .env에 넣으면 ngrok config 없이 자동 인증.
 
 ## 워크플로우
 
@@ -106,24 +107,23 @@ SYSTEM_PROMPT = """당신은 AI 비서 '하나'예요. 반말로 친근하게 �
 
 ## 핵심 기술 포인트
 
-오디오 포맷 변환 (틀리면 칙칙 소리):
-- Twilio→OpenAI: mu-law 8kHz → PCM16 16kHz (`audioop.ulaw2lin` + `audioop.ratecv`)
-- OpenAI→Twilio: PCM16 **24kHz** → mu-law 8kHz (24kHz 필수, `audioop.ratecv` + `audioop.lin2ulaw`)
-
-**audioop 사용 필수.** Python 3.13+에서는 audioop가 제거됐으므로 `audioop-lts` 패키지 설치 필요. NumPy 등으로 대체하지 말 것 (버그 발생 위험).
+오디오 포맷: **g711_ulaw** (Twilio와 OpenAI가 동일 포맷 사용)
+- Twilio mu-law 8kHz ↔ OpenAI g711_ulaw: 변환 없이 직접 패스스루
+- audioop 불필요 (Python 3.13+ 호환 문제 없음)
+- 칙칙 소리 원인이었던 `audioop.ratecv` 상태 관리 문제 해결
 
 ## 문제 해결
 
 | 증상 | 해결 |
 |------|------|
-| `ModuleNotFoundError: audioop` | `pip3 install audioop-lts` (Python 3.13+) |
-| 칙칙 소리 | `openai_to_twilio_audio`에서 24000→8000 확인 |
+| 칙칙 소리 | g711_ulaw 포맷 사용 확인 (pcm16은 변환 필요해 칙칙거림) |
 | 스페인어/영어로 대답 | voice 이름 유효한지 확인 (fable 등 구형 제거됨), SYSTEM_PROMPT가 한국어인지 확인 |
 | error 10005 | Twilio Customer Profile 생성 + 지원팀 Voice 활성화 요청 |
 | 국제전화 수신거부 | 수신자가 통신사에서 국제전화 수신 허용 |
 | .env 값 비어있음 | `bash scripts/setup.sh` 실행 후 .env에 API 키 채우기 |
 | ngrok 없음 | Mac: `brew install ngrok` / Linux: `snap install ngrok` 또는 직접 다운로드 |
-| application error + 5초 끊김 | server_realtime.py 실행 확인 (server.py 아님), audioop-lts 설치 확인 |
+| ngrok 세션 제한 | 무료 계정 동시 1세션. 다른 기기 ngrok 종료 또는 dashboard.ngrok.com/agents에서 세션 종료 |
+| application error + 5초 끊김 | server_realtime.py 실행 확인 (server.py 아님) |
 
 ## 비용
 

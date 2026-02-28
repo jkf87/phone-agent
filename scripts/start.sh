@@ -24,7 +24,7 @@ if [ -f "$SKILL_DIR/venv/bin/activate" ]; then
 fi
 
 # 의존성 체크 (최초 실행 시 자동 설치)
-if ! "$PYTHON_CMD" -c "import fastapi, uvicorn, twilio, websockets, audioop" 2>/dev/null; then
+if ! "$PYTHON_CMD" -c "import fastapi, uvicorn, twilio, websockets" 2>/dev/null; then
   echo "→ Python 패키지 설치 중..."
   "$PYTHON_CMD" -m pip install --break-system-packages -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null \
     || "$PYTHON_CMD" -m pip install -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null \
@@ -74,18 +74,42 @@ fi
 # 기존 서버 종료
 pkill -f "server_realtime.py" 2>/dev/null
 
+# .env의 NGROK_AUTHTOKEN 자동 설정
+if [ -n "$NGROK_AUTHTOKEN" ]; then
+  export NGROK_AUTHTOKEN
+  echo "✓ ngrok authtoken (.env에서 로드)"
+fi
+
 # ngrok 시작/재사용
 if curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -q "public_url"; then
   echo "✓ ngrok 실행 중"
 else
   echo "→ ngrok 시작..."
   pkill -f "ngrok" 2>/dev/null; sleep 1
-  ngrok http "$SERVER_PORT" > /dev/null 2>&1 &
+  NGROK_LOG=$(mktemp)
+  ngrok http "$SERVER_PORT" --log "$NGROK_LOG" > /dev/null 2>&1 &
+  NGROK_STARTED=false
   for i in {1..10}; do
     sleep 1
-    curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -q "public_url" && break
-    [ $i -eq 10 ] && echo "✗ ngrok 시작 실패. authtoken이 설정됐는지 확인하세요." && exit 1
+    if curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -q "public_url"; then
+      NGROK_STARTED=true
+      break
+    fi
+    # 세션 제한 에러 감지
+    if grep -qi "ERR_NGROK_108\|session limit\|tunnel session" "$NGROK_LOG" 2>/dev/null; then
+      echo "✗ ngrok 세션 제한: 무료 계정은 동시에 1개 세션만 허용"
+      echo "  다른 기기/터미널에서 ngrok이 실행 중인지 확인하세요."
+      echo "  해결: (1) 다른 ngrok 종료  (2) https://dashboard.ngrok.com/agents 에서 세션 종료"
+      rm -f "$NGROK_LOG"
+      exit 1
+    fi
   done
+  rm -f "$NGROK_LOG"
+  if [ "$NGROK_STARTED" = false ]; then
+    echo "✗ ngrok 시작 실패."
+    echo "  authtoken이 설정됐는지 확인: ngrok config add-authtoken 여기에_토큰"
+    exit 1
+  fi
 fi
 
 # ngrok URL 추출
