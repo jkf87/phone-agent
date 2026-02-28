@@ -5,11 +5,9 @@ Real-time speech-to-speech voice agent over phone calls.
 import os
 import json
 import asyncio
-import base64
 import logging
 from urllib.parse import urlsplit
 
-import audioop
 import uvicorn
 from fastapi import FastAPI, WebSocket, Request, Response
 from fastapi.websockets import WebSocketDisconnect
